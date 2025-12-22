@@ -28,8 +28,8 @@ class CyclingPolicy:
 
 
 @pytest.fixture()
-def client(tmp_path: pytest.TempPathFactory) -> TestClient:
-    db_path = tmp_path.mktemp("db") / "idem.sqlite"
+def client(tmp_path) -> TestClient:
+    db_path = tmp_path / "idem.sqlite"
     store = IdempotencyStore(str(db_path))
 
     registry = PolicyRegistry(policies={"cycle": CyclingPolicy()})
