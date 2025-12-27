@@ -8,8 +8,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from chesster.league.elo import DEFAULT_ELO
+
 if TYPE_CHECKING:
     from chesster.policies.net import SmallNetPolicy
+
+
+@dataclass
+class EloHistoryEntry:
+    """A single entry in a model's ELO history."""
+
+    elo: float
+    opponent: str
+    timestamp: str
+    games_played: int
+    result: str  # "win", "loss", "draw", or W-D-L summary like "3-2-1"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> EloHistoryEntry:
+        return cls(**d)
 
 
 @dataclass
@@ -20,12 +40,23 @@ class SnapshotInfo:
     artifact_path: str  # relative to registry root
     created_at: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    # ELO tracking fields
+    elo: float = DEFAULT_ELO
+    elo_history: list[dict[str, Any]] = field(default_factory=list)
+    games_played: int = 0
+    is_bot: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> SnapshotInfo:
+        # Handle backward compatibility for snapshots without ELO fields
+        d = d.copy()
+        d.setdefault("elo", DEFAULT_ELO)
+        d.setdefault("elo_history", [])
+        d.setdefault("games_played", 0)
+        d.setdefault("is_bot", True)
         return cls(**d)
 
 
@@ -191,3 +222,67 @@ class ModelRegistry:
 
         return True
 
+    def update_elo(
+        self,
+        name: str,
+        new_elo: float,
+        opponent: str,
+        result: str,
+        games_played: int,
+    ) -> SnapshotInfo:
+        """
+        Update the ELO rating for a snapshot.
+
+        Args:
+            name: Snapshot name.
+            new_elo: New ELO rating.
+            opponent: Name of the opponent.
+            result: Result description (e.g., "3-2-1" for 3W-2D-1L).
+            games_played: Number of games in this match.
+
+        Returns:
+            Updated SnapshotInfo.
+
+        Raises:
+            KeyError: If snapshot not found.
+        """
+        info = self._index.get(name)
+        if info is None:
+            raise KeyError(f"Snapshot not found: {name!r}")
+
+        # Create history entry
+        history_entry = EloHistoryEntry(
+            elo=new_elo,
+            opponent=opponent,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            games_played=games_played,
+            result=result,
+        )
+
+        # Update the snapshot info
+        info.elo_history.append(history_entry.to_dict())
+        info.elo = new_elo
+        info.games_played += games_played
+
+        # Save to disk
+        self._save_index()
+
+        # Also update the individual snapshot info.json
+        snapshot_dir = self._snapshots_dir / name
+        info_path = snapshot_dir / "info.json"
+        if info_path.exists():
+            with open(info_path, "w", encoding="utf-8") as f:
+                json.dump(info.to_dict(), f, indent=2)
+
+        return info
+
+    def get_leaderboard(self) -> list[SnapshotInfo]:
+        """
+        Get all snapshots sorted by ELO rating (highest first).
+
+        Returns:
+            List of SnapshotInfo sorted by ELO descending.
+        """
+        snapshots = list(self._index.values())
+        snapshots.sort(key=lambda s: s.elo, reverse=True)
+        return snapshots

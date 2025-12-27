@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from chesster.league.arena import run_arena
+from chesster.league.elo import EloUpdate, calculate_elo_change
 
 if TYPE_CHECKING:
     from chesster.policies.base import Policy
@@ -23,6 +24,12 @@ class GatingResult:
     games_played: int
     threshold: float
     details: str
+    # ELO tracking
+    wins: int = 0
+    draws: int = 0
+    losses: int = 0
+    challenger_elo: EloUpdate | None = None
+    baseline_elo: EloUpdate | None = None
 
 
 @dataclass
@@ -46,6 +53,8 @@ def should_promote(
     challenger: Policy,
     baseline: Policy,
     config: GatingConfig | None = None,
+    challenger_elo: float | None = None,
+    baseline_elo: float | None = None,
 ) -> GatingResult:
     """
     Decide whether a challenger policy should be promoted over the baseline.
@@ -54,9 +63,11 @@ def should_promote(
         challenger: The new policy being evaluated.
         baseline: The current best policy.
         config: Gating configuration.
+        challenger_elo: Current ELO of challenger (for ELO calculation).
+        baseline_elo: Current ELO of baseline (for ELO calculation).
 
     Returns:
-        GatingResult indicating whether the challenger passed.
+        GatingResult indicating whether the challenger passed, with ELO updates if provided.
     """
     if config is None:
         config = GatingConfig()
@@ -82,11 +93,14 @@ def should_promote(
     score_rate = arena_result.overall_score_rate
     win_rate = arena_result.overall_win_rate
     games_played = arena_result.total_games
+    wins = arena_result.total_wins
+    draws = arena_result.total_draws
+    losses = arena_result.total_losses
 
     passed = score_rate >= config.score_threshold
 
     details = (
-        f"{arena_result.total_wins}W / {arena_result.total_draws}D / {arena_result.total_losses}L "
+        f"{wins}W / {draws}D / {losses}L "
         f"(score={score_rate:.1%}, threshold={config.score_threshold:.1%})"
     )
 
@@ -95,6 +109,22 @@ def should_promote(
     else:
         logger.info(f"FAILED: {details}")
 
+    # Calculate ELO updates if ratings provided
+    challenger_elo_update: EloUpdate | None = None
+    baseline_elo_update: EloUpdate | None = None
+    if challenger_elo is not None and baseline_elo is not None:
+        challenger_elo_update, baseline_elo_update = calculate_elo_change(
+            rating_a=challenger_elo,
+            rating_b=baseline_elo,
+            wins_a=wins,
+            draws=draws,
+            losses_a=losses,
+        )
+        logger.info(
+            f"ELO: {challenger_id} {challenger_elo:.0f} -> {challenger_elo_update.rating_after:.0f} "
+            f"({challenger_elo_update.rating_change:+.0f})"
+        )
+
     return GatingResult(
         passed=passed,
         score_rate=score_rate,
@@ -102,6 +132,11 @@ def should_promote(
         games_played=games_played,
         threshold=config.score_threshold,
         details=details,
+        wins=wins,
+        draws=draws,
+        losses=losses,
+        challenger_elo=challenger_elo_update,
+        baseline_elo=baseline_elo_update,
     )
 
 
