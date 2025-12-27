@@ -6,6 +6,7 @@
 - Model plays legal chess but is not yet competitive with Stockfish
 - Training data has been scaled up, but more iterations needed
 - **ELO rating system implemented** (leaderboard, gating integration, API endpoint)
+- **HuggingFace LLM policy implemented** (`policies/hf_llm.py`) with ELO-aware prompts
 - Exploring two parallel research tracks: improve CNN vs try LLM fine-tuning
 
 ---
@@ -36,28 +37,56 @@ ollama run deepseek-r1:1.5b "You are a chess engine. Given FEN: rnbqkbnr/ppppppp
 
 ### Implementation Plan
 
-New files to create:
+**Phase 1 (Completed):** HuggingFace LLM inference
 
 ```
 src/chesster/
 ├── policies/
-│   └── llm_finetune.py    # LoRA-wrapped LLM policy
+│   └── hf_llm.py          # HuggingFace LLM policy with ELO context (DONE)
+```
+
+**Phase 2 (Next):** RL training
+
+```
+src/chesster/
+├── policies/
+│   └── llm_finetune.py    # LoRA-wrapped LLM for training
 ├── train/
-│   └── llm_rl.py          # TRL-based PPO/REINFORCE trainer
+│   └── llm_rl.py          # RL trainer (approach TBD - see research question below)
 ```
 
 ### Dependencies
 
 ```bash
-pip install transformers peft trl bitsandbytes accelerate
+pip install chesster[llm]  # transformers, accelerate, bitsandbytes
+pip install peft trl       # For Phase 2 RL training
 ```
 
-### Approach
+### Phase 2 RL Training Approach (Open Research Question)
 
-1. **Base Model**: Download weights from HuggingFace (e.g., `Qwen/Qwen2.5-1.5B`)
+Several approaches exist for RL fine-tuning of LLMs. Phase 2 experiments will determine what works best for chess:
+
+| Approach | Pros | Cons | Libraries |
+|----------|------|------|-----------|
+| **LoRA + REINFORCE** | Simple, low memory | High variance | Custom |
+| **LoRA + PPO** | More stable than REINFORCE | Complex, needs value head | TRL |
+| **DPO (Direct Preference Optimization)** | No reward model needed | Needs preference pairs | TRL |
+| **Full fine-tuning** | Maximum capacity | High memory, slow | transformers |
+
+**Key questions to answer:**
+- Does PPO's stability matter for chess (we have dense rewards from Stockfish)?
+- Can we use Stockfish evaluations directly as rewards?
+- Is LoRA sufficient or do we need more trainable parameters?
+- How does sample efficiency compare to CNN approach?
+
+**Recommendation:** Start with **LoRA + REINFORCE** (simplest), measure variance. If too unstable, try **PPO** via TRL.
+
+### Approach (Phase 2)
+
+1. **Base Model**: Download weights from HuggingFace (e.g., `deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B`)
 2. **LoRA/QLoRA**: Parameter-efficient fine-tuning (~0.1-1% of weights)
 3. **Reward Signal**: Same as CNN approach (match_bestmove, cp_delta, outcome)
-4. **Training**: Use TRL library's `PPOTrainer` or custom REINFORCE
+4. **Training**: Start with custom REINFORCE, upgrade to TRL's `PPOTrainer` if needed
 5. **Self-Play**: LLM vs LLM or LLM vs CNN for comparison
 
 ### Opponent Context (LLM Advantage)
@@ -211,7 +240,8 @@ GET  /v1/models/{name}/stats   # Model statistics
 | Priority | Task | Status |
 |----------|------|--------|
 | P0 | ELO rating system | **Done** |
-| P0 | LLM fine-tuning experiments (DeepSeek-R1, Phi-3) | Next |
+| P0 | HuggingFace LLM inference policy (`hf_llm.py`) | **Done** |
+| P0 | LLM RL training experiments (DeepSeek-R1) | **Next** |
 | P0 | Implement `llm_finetune.py` and `llm_rl.py` | Next |
 | P1 | Compare CNN vs LLM approaches | Todo |
 | P2 | PPO/A2C implementation for CNN | Todo |
@@ -227,8 +257,9 @@ GET  /v1/models/{name}/stats   # Model statistics
 | Phase | Tasks | Duration |
 |-------|-------|----------|
 | ~~Phase 0~~ | ~~ELO rating system~~ | **Done** |
-| Phase 1 | LLM inference via Ollama, basic fine-tuning setup | 1-2 weeks |
-| Phase 2 | LoRA training loop, initial experiments | 2-3 weeks |
+| ~~Phase 1a~~ | ~~HuggingFace LLM inference policy~~ | **Done** |
+| Phase 1b | Test inference with DeepSeek-R1 model | ~1 day |
+| Phase 2 | LoRA RL training loop (`llm_rl.py`) | 2-3 weeks |
 | Phase 3 | CNN vs LLM comparison | 1-2 weeks |
 | Phase 4 | GCP setup, larger scale training | 2-4 weeks |
 | Phase 5 | Frontend dashboard | 2-3 weeks |

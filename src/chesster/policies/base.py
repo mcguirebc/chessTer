@@ -18,6 +18,11 @@ class ChooseMoveParams:
     top_p: float | None = None
     max_tokens: int | None = None
 
+    # ELO context for LLM prompts (enables opponent-aware play)
+    opponent_elo: float | None = None
+    self_elo: float | None = None
+    opponent_is_bot: bool | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class MoveResult:
