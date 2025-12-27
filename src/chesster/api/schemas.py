@@ -43,5 +43,23 @@ class PoliciesResponse(BaseModel):
     policies: list[PolicyInfo]
 
 
+class LeaderboardEntry(BaseModel):
+    """A single entry in the leaderboard."""
+
+    name: str = Field(..., description="Model snapshot name")
+    elo: float = Field(..., description="Current ELO rating")
+    games_played: int = Field(..., description="Total games played for rating")
+    is_bot: bool = Field(..., description="Whether this is a bot (vs human)")
+
+
+class LeaderboardResponse(BaseModel):
+    """Response containing leaderboard rankings."""
+
+    rankings: list[LeaderboardEntry] = Field(
+        default_factory=list,
+        description="List of models sorted by ELO (highest first)",
+    )
+
+
 
 

@@ -5,6 +5,7 @@
 - CNN model trained via behavior cloning + self-play RL
 - Model plays legal chess but is not yet competitive with Stockfish
 - Training data has been scaled up, but more iterations needed
+- **ELO rating system implemented** (leaderboard, gating integration, API endpoint)
 - Exploring two parallel research tracks: improve CNN vs try LLM fine-tuning
 
 ---
@@ -110,17 +111,17 @@ Continue improving the existing SmallNetPolicy CNN.
 
 ---
 
-## Priority 1: ELO Rating System
+## ELO Rating System (Completed)
 
 Track model strength over time with proper ELO calculations.
 
-### Features
+### Implemented Features
 
-- Calculate ELO after each gating match
-- Track rating history per snapshot
-- Add ELO to registry metadata
-- Initial ratings: Random=800, Stockfish=2800
-- Track `is_bot=True` flag for all trained models
+- **ELO Calculations** (`league/elo.py`): Standard ELO formula with K=32
+- **Registry Integration**: `SnapshotInfo` includes `elo`, `elo_history`, `games_played`, `is_bot`
+- **Gating Integration**: ELO updates calculated after each gating match
+- **Leaderboard API**: `GET /v1/leaderboard` returns models sorted by ELO
+- **Initial Ratings**: Random=800, Stockfish=2800, Default=1200
 
 ### Why ELO Matters for LLM Training
 
@@ -132,25 +133,19 @@ This creates a feedback loop where the LLM learns to adapt its play based on opp
 
 ### API Endpoint
 
-```
-GET /v1/leaderboard
+```bash
+curl http://127.0.0.1:8000/v1/leaderboard
 ```
 
 Returns:
 ```json
 {
   "rankings": [
-    {"name": "v0042", "elo": 1523, "games": 150},
-    {"name": "init", "elo": 1200, "games": 100}
+    {"name": "v0042", "elo": 1523, "games_played": 150, "is_bot": true},
+    {"name": "init", "elo": 1200, "games_played": 100, "is_bot": true}
   ]
 }
 ```
-
-### Implementation
-
-- Add `elo` field to `SnapshotInfo` in registry
-- Create `league/elo.py` with ELO calculation functions
-- Update gating to record ELO changes
 
 ---
 
@@ -215,9 +210,9 @@ GET  /v1/models/{name}/stats   # Model statistics
 
 | Priority | Task | Status |
 |----------|------|--------|
-| P0 | LLM fine-tuning experiments (DeepSeek-R1, Phi-3) | Todo |
-| P0 | Implement `llm_finetune.py` and `llm_rl.py` | Todo |
-| P1 | ELO rating system | Todo |
+| P0 | ELO rating system | **Done** |
+| P0 | LLM fine-tuning experiments (DeepSeek-R1, Phi-3) | Next |
+| P0 | Implement `llm_finetune.py` and `llm_rl.py` | Next |
 | P1 | Compare CNN vs LLM approaches | Todo |
 | P2 | PPO/A2C implementation for CNN | Todo |
 | P2 | MCTS for inference-time search | Todo |
@@ -231,8 +226,9 @@ GET  /v1/models/{name}/stats   # Model statistics
 
 | Phase | Tasks | Duration |
 |-------|-------|----------|
+| ~~Phase 0~~ | ~~ELO rating system~~ | **Done** |
 | Phase 1 | LLM inference via Ollama, basic fine-tuning setup | 1-2 weeks |
 | Phase 2 | LoRA training loop, initial experiments | 2-3 weeks |
-| Phase 3 | ELO system, CNN vs LLM comparison | 1-2 weeks |
+| Phase 3 | CNN vs LLM comparison | 1-2 weeks |
 | Phase 4 | GCP setup, larger scale training | 2-4 weeks |
 | Phase 5 | Frontend dashboard | 2-3 weeks |

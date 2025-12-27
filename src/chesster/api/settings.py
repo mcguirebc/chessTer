@@ -15,6 +15,20 @@ class ApiSettings(BaseSettings):
     ollama_default_model: str = "gpt-oss-20b"
     ollama_timeout_s: float = 30.0
 
+    # Model registry path for leaderboard
+    registry_path: str | None = "runs/registry"
+
+
+_settings: ApiSettings | None = None
+
+
+def get_settings() -> ApiSettings:
+    """Get cached settings instance."""
+    global _settings
+    if _settings is None:
+        _settings = ApiSettings()
+    return _settings
+
 
 
 

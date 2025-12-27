@@ -10,7 +10,15 @@ from fastapi import Depends, FastAPI, HTTPException
 
 from chesster.api.deps import PolicyRegistry, get_idempotency_store, get_policy_registry
 from chesster.api.idempotency import hash_request
-from chesster.api.schemas import MoveRequest, MoveResponse, PoliciesResponse, PolicyInfo
+from chesster.api.schemas import (
+    LeaderboardEntry,
+    LeaderboardResponse,
+    MoveRequest,
+    MoveResponse,
+    PoliciesResponse,
+    PolicyInfo,
+)
+from chesster.api.settings import get_settings
 from chesster.chess.board import FenParseError, IllegalMoveError, move_to_san, parse_board, parse_uci_move
 from chesster.policies.base import ChooseMoveParams, Policy
 
@@ -131,4 +139,40 @@ def choose_move(
 
     return response
 
+
+@app.get("/v1/leaderboard", response_model=LeaderboardResponse)
+def get_leaderboard() -> LeaderboardResponse:
+    """
+    Get all registered models sorted by ELO rating.
+
+    Returns models from the registry sorted by ELO (highest first).
+    If no registry is configured, returns an empty leaderboard.
+    """
+    from chesster.league.registry import ModelRegistry
+
+    settings = get_settings()
+    registry_path = settings.registry_path
+
+    if registry_path is None:
+        # No registry configured, return empty leaderboard
+        return LeaderboardResponse(rankings=[])
+
+    try:
+        registry = ModelRegistry(registry_path)
+        snapshots = registry.get_leaderboard()
+
+        rankings = [
+            LeaderboardEntry(
+                name=snap.name,
+                elo=snap.elo,
+                games_played=snap.games_played,
+                is_bot=snap.is_bot,
+            )
+            for snap in snapshots
+        ]
+
+        return LeaderboardResponse(rankings=rankings)
+    except Exception as e:
+        # If registry doesn't exist or is corrupt, return empty
+        return LeaderboardResponse(rankings=[])
 
