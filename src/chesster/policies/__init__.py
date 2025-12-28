@@ -15,6 +15,9 @@ def __getattr__(name: str):
     if name == "HuggingFaceLLMPolicy":
         from chesster.policies.hf_llm import HuggingFaceLLMPolicy
         return HuggingFaceLLMPolicy
+    if name == "LoRALLMPolicy":
+        from chesster.policies.llm_lora import LoRALLMPolicy
+        return LoRALLMPolicy
     if name == "OllamaPolicy":
         from chesster.policies.ollama import OllamaPolicy
         return OllamaPolicy
