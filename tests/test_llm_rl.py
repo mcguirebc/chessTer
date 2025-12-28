@@ -225,7 +225,6 @@ class TestLLMRLIntegration:
     @pytest.mark.skip(reason="Requires model download and GPU time")
     def test_full_training_run(self):
         """Should complete a minimal training run."""
-        import tempfile
         from chesster.train.llm_rl import LLMRLConfig, train_llm_rl
 
         with tempfile.TemporaryDirectory() as tmpdir:

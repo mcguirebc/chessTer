@@ -298,7 +298,9 @@ class LoRALLMPolicy:
 
         # Store prompt for batch training later (no gradient computation during play)
         # We'll compute loss in a separate batch pass
-        log_prob = torch.tensor(0.0, requires_grad=False)  # Placeholder
+        # TODO: For actual RL training, compute token log probabilities here.
+        # Currently a placeholder - acceptable for MVP pipeline validation (see ROADMAP).
+        log_prob = torch.tensor(0.0, requires_grad=False)
 
         # Extract move
         chosen_uci = self._extract_move(generated_text, board)
