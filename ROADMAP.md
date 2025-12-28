@@ -7,6 +7,8 @@
 - Training data has been scaled up, but more iterations needed
 - **ELO rating system implemented** (leaderboard, gating integration, API endpoint)
 - **HuggingFace LLM policy implemented** (`policies/hf_llm.py`) with ELO-aware prompts
+- **LoRA training policy implemented** (`policies/llm_lora.py`) for RL fine-tuning
+- **REINFORCE trainer implemented** (`train/llm_rl.py`) with outcome rewards
 - Exploring two parallel research tracks: improve CNN vs try LLM fine-tuning
 
 ---
@@ -45,21 +47,42 @@ src/chesster/
 │   └── hf_llm.py          # HuggingFace LLM policy with ELO context (DONE)
 ```
 
-**Phase 2 (Next):** RL training
+**Phase 2a (Completed):** LoRA + REINFORCE training infrastructure
 
 ```
 src/chesster/
 ├── policies/
-│   └── llm_finetune.py    # LoRA-wrapped LLM for training
+│   └── llm_lora.py        # LoRA-wrapped LLM for training (DONE)
 ├── train/
-│   └── llm_rl.py          # RL trainer (approach TBD - see research question below)
+│   └── llm_rl.py          # REINFORCE trainer with outcome rewards (DONE)
 ```
+
+**Phase 2.5 (Next):** Model comparison (Qwen vs DeepSeek)
+
+Run training on both models, compare results, decide which to scale.
 
 ### Dependencies
 
 ```bash
-pip install chesster[llm]  # transformers, accelerate, bitsandbytes
-pip install peft trl       # For Phase 2 RL training
+pip install chesster[llm]  # transformers, accelerate, bitsandbytes, peft, trl
+```
+
+### CLI Usage
+
+```bash
+# Run MVP training (100 games, 1 epoch)
+python -m chesster.train.llm_rl \
+    --model Qwen/Qwen2.5-1.5B-Instruct \
+    --games 100 \
+    --epochs 1 \
+    --output runs/llm/qwen_v1
+
+# Run with DeepSeek for comparison
+python -m chesster.train.llm_rl \
+    --model deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B \
+    --games 100 \
+    --epochs 1 \
+    --output runs/llm/deepseek_v1
 ```
 
 ### Phase 2 RL Training Approach (Open Research Question)
@@ -119,6 +142,62 @@ This context could help the model:
 - Can we get emergent reasoning about chess positions?
 - Does chain-of-thought prompting improve move quality?
 - Does opponent ELO context improve adaptation and win rate?
+
+---
+
+## Phase 2 Decision Tree
+
+After running the MVP, evaluate results and follow this decision tree:
+
+### Phase 2a: MVP Validation (Current)
+
+| Metric | Success Criteria |
+|--------|------------------|
+| Training completes | No OOM on M4 16GB |
+| Loss trend | Decreasing (not flat) |
+| Win rate vs Random | > 50% |
+
+### Phase 2.5: Model Comparison
+
+Once Phase 2a succeeds, run training on both models:
+
+| Model | Games | Epochs | Evaluation |
+|-------|-------|--------|------------|
+| Qwen2.5-1.5B-Instruct | 500 | 3 | 50 games vs Stockfish |
+| DeepSeek-R1-Distill-Qwen-1.5B | 500 | 3 | 50 games vs Stockfish |
+
+**Comparison Metrics:**
+- Win rate vs Random (target: >70%)
+- Win rate vs Stockfish depth 5
+- Training stability (loss variance)
+- Inference speed (ms/move)
+
+**Decision Matrix:**
+
+| Qwen Result | DeepSeek Result | Next Step |
+|-------------|-----------------|-----------|
+| Good (>60% vs Random) | Bad (<55%) | Scale Qwen only |
+| Bad (<55%) | Good (>60%) | Scale DeepSeek only |
+| Good | Good | Scale both, compare at 1000+ games |
+| Bad | Bad | Phase 2b: Try alternative approaches |
+
+### Phase 2b/2c/2d: Alternative Approaches (if needed)
+
+| Phase | Condition | Action |
+|-------|-----------|--------|
+| 2b | REINFORCE too unstable | Try PPO via TRL |
+| 2c | No learning signal | Add dense Stockfish rewards (cp_delta) |
+| 2d | PPO also fails | Try DPO with preference pairs |
+
+### Phase 3: Scale Up (after Phase 2.5 succeeds)
+
+| Parameter | Value |
+|-----------|-------|
+| Model(s) | Winner(s) from Phase 2.5 |
+| Games | 1000+ per epoch |
+| Epochs | 10+ |
+| Integration | Gating system, ELO tracking |
+| Evaluation | Head-to-head vs CNN approach |
 
 ---
 
@@ -241,11 +320,14 @@ GET  /v1/models/{name}/stats   # Model statistics
 |----------|------|--------|
 | P0 | ELO rating system | **Done** |
 | P0 | HuggingFace LLM inference policy (`hf_llm.py`) | **Done** |
-| P0 | LLM RL training experiments (DeepSeek-R1) | **Next** |
-| P0 | Implement `llm_finetune.py` and `llm_rl.py` | Next |
+| P0 | LoRA training policy (`llm_lora.py`) | **Done** |
+| P0 | REINFORCE trainer (`llm_rl.py`) | **Done** |
+| P0 | Phase 2a: Run MVP training (100 games) | **Next** |
+| P0 | Phase 2.5: Qwen vs DeepSeek comparison | Next |
+| P1 | Phase 3: Scale winner(s) to 1000+ games | Todo |
 | P1 | Compare CNN vs LLM approaches | Todo |
-| P2 | PPO/A2C implementation for CNN | Todo |
-| P2 | MCTS for inference-time search | Todo |
+| P2 | PPO/A2C implementation (if REINFORCE unstable) | Contingent |
+| P2 | Dense Stockfish rewards (if no learning) | Contingent |
 | P2 | GCP setup with GPU/TPU | Todo |
 | P3 | Frontend dashboard | Todo |
 | P3 | Distributed training | Todo |
@@ -258,8 +340,28 @@ GET  /v1/models/{name}/stats   # Model statistics
 |-------|-------|----------|
 | ~~Phase 0~~ | ~~ELO rating system~~ | **Done** |
 | ~~Phase 1a~~ | ~~HuggingFace LLM inference policy~~ | **Done** |
-| Phase 1b | Test inference with DeepSeek-R1 model | ~1 day |
-| Phase 2 | LoRA RL training loop (`llm_rl.py`) | 2-3 weeks |
-| Phase 3 | CNN vs LLM comparison | 1-2 weeks |
+| ~~Phase 1b~~ | ~~Test inference with models~~ | **Done** |
+| ~~Phase 2a~~ | ~~LoRA + REINFORCE infrastructure~~ | **Done** |
+| ~~Phase 2a-run~~ | ~~MVP validation (pipeline works, 45% valid moves)~~ | **Done** |
+| Phase 2.5-local | Play more games, tune prompts for higher valid rate | ~1 day |
+| Phase 2.5-GCP | Full REINFORCE training (needs GPU memory) | 1 week |
+| Phase 3 | Scale winner(s), CNN vs LLM comparison | 1-2 weeks |
 | Phase 4 | GCP setup, larger scale training | 2-4 weeks |
 | Phase 5 | Frontend dashboard | 2-3 weeks |
+
+### MVP Results (Dec 27, 2024)
+
+**Model Comparison (M4 MacBook):**
+
+| Model | Valid Move Rate | Time (5 games) | Notes |
+|-------|----------------|----------------|-------|
+| **Qwen2.5-1.5B-Instruct** | **99.1%** | 40s | Best for direct move output |
+| DeepSeek-R1-Distill-Qwen-1.5B | 0% | 123s | Outputs reasoning text, not moves |
+
+**Winner: Qwen** - DeepSeek is a reasoning model that "thinks" before answering, making it unsuitable for direct UCI output.
+
+**Key findings:**
+- Simpler prompts work better ("Pick from list" vs complex FEN prompts)
+- System prompt is essential for instruction following
+- LoRA adapters save/load correctly
+- REINFORCE backprop needs GPU (OOM on 16GB unified memory)

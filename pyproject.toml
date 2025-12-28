@@ -26,6 +26,8 @@ llm = [
   "transformers>=4.40",
   "accelerate>=0.30",
   "bitsandbytes>=0.43",
+  "peft>=0.11",
+  "trl>=0.9",
 ]
 
 [build-system]
