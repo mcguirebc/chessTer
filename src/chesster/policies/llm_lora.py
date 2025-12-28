@@ -325,9 +325,6 @@ class LoRALLMPolicy:
                 )
             fallback = choose_fallback_legal_move(board, seed=params.seed)
             chosen_move = fallback
-            # For fallback, use log_prob with gradient to allow learning
-            # We use the computed log_prob (even if the move was wrong) or a small penalty
-            # This way the model learns that invalid outputs get low returns
         else:
             chosen_move = parse_uci_move(board, chosen_uci)
 
