@@ -187,13 +187,22 @@ def evaluate_model(
         print(f"Running {total_games} games ({games} per opponent)...")
 
     # Run arena
-    arena_result = run_arena(
-        challenger=policy,
-        opponents=opponent_policies,
-        games_per_opponent=games,
-        base_seed=base_seed,
-        alternate_colors=True,
-    )
+    try:
+        arena_result = run_arena(
+            challenger=policy,
+            opponents=opponent_policies,
+            games_per_opponent=games,
+            base_seed=base_seed,
+            alternate_colors=True,
+        )
+    finally:
+        # Clean up policies (especially Stockfish)
+        for p in [policy] + opponent_policies:
+            if hasattr(p, "close") and callable(p.close):
+                try:
+                    p.close()
+                except Exception as e:
+                    logger.warning(f"Failed to close policy {getattr(p, 'policy_id', 'unknown')}: {e}")
 
     # Build evaluation result
     timestamp = datetime.now(timezone.utc).isoformat()

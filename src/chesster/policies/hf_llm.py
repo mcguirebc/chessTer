@@ -186,7 +186,7 @@ class HuggingFaceLLMPolicy:
         side = "White" if board.turn == chess.WHITE else "Black"
         moves_str = " ".join(legal_moves)
 
-        # Build context section if ELO info provided
+        # Build context parts
         context_parts = []
         if opponent_elo is not None:
             opponent_type = "bot" if opponent_is_bot else "human"
@@ -194,6 +194,27 @@ class HuggingFaceLLMPolicy:
         if self_elo is not None:
             context_parts.append(f"Your rating: {self_elo:.0f} ELO")
 
+        # Try to use chat template if available
+        if hasattr(self._tokenizer, "apply_chat_template"):
+            system_content = "You are a chess engine. Pick one move from the list. Output only the UCI move notation."
+            user_content = f"FEN: {fen}\n"
+            if context_parts:
+                user_content += "\n".join(context_parts) + "\n"
+            user_content += f"Legal moves: {moves_str}\nChoice:"
+
+            messages = [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ]
+            try:
+                return self._tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            except Exception:
+                # Fallback to plain text if template fails
+                pass
+
+        # Plain text fallback
         if context_parts:
             context = "\n".join(context_parts) + "\n\n"
             prompt = (
@@ -204,7 +225,6 @@ class HuggingFaceLLMPolicy:
                 f"Choose the best move. Reply with only the UCI move notation."
             )
         else:
-            # Simple prompt without ELO context
             prompt = (
                 f"You are a chess engine. Choose the best move for {side}.\n\n"
                 f"Position (FEN): {fen}\n"
@@ -319,6 +339,10 @@ class HuggingFaceLLMPolicy:
         san = move_to_san(board, chosen_move)
 
         return MoveResult(uci=uci, san=san, info=info)
+
+    def close(self) -> None:
+        """Alias for unload() to match policy interface."""
+        self.unload()
 
     def unload(self) -> None:
         """Unload the model to free memory."""
